@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vokabel-JSON erstellen</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: #172033;
+      background: #f3f6fb;
+    }
+
+    * { box-sizing: border-box; }
+
+    body { margin: 0; }
+
+    main {
+      width: min(920px, calc(100% - 32px));
+      margin: 40px auto;
+    }
+
+    h1 { margin-bottom: 8px; }
+
+    .intro, .hint { color: #536078; line-height: 1.5; }
+
+    .panel {
+      margin-top: 20px;
+      padding: 22px;
+      border: 1px solid #dce3ee;
+      border-radius: 12px;
+      background: white;
+      box-shadow: 0 4px 16px #1720330b;
+    }
+
+    .fields, .entry {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    label { display: grid; gap: 6px; font-weight: 600; }
+
+    input, textarea, button { font: inherit; }
+
+    input[type="text"], textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #b9c4d5;
+      border-radius: 7px;
+      color: inherit;
+      background: white;
+    }
+
+    input:focus, textarea:focus, button:focus-visible {
+      outline: 3px solid #8bb9ff;
+      outline-offset: 2px;
+    }
+
+    input[type="file"] { max-width: 100%; }
+
+    .image-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .image-card {
+      overflow: hidden;
+      border: 1px solid #dce3ee;
+      border-radius: 8px;
+      background: #f7f9fc;
+    }
+
+    .image-card img {
+      display: block;
+      width: 100%;
+      height: 110px;
+      object-fit: contain;
+      background: #e9eef6;
+    }
+
+    .image-card span {
+      display: block;
+      overflow: hidden;
+      padding: 7px;
+      font-size: 13px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .pdf-preview {
+      width: 100%;
+      height: min(75vh, 800px);
+      min-height: 420px;
+      margin-top: 14px;
+      border: 1px solid #dce3ee;
+      border-radius: 8px;
+      background: #e9eef6;
+    }
+
+    .entry {
+      align-items: end;
+      margin-top: 12px;
+      padding: 14px;
+      border: 1px solid #e0e6ef;
+      border-radius: 8px;
+    }
+
+    .entry label { font-weight: 500; }
+
+    button {
+      min-height: 40px;
+      padding: 9px 14px;
+      border: 1px solid #b9c4d5;
+      border-radius: 7px;
+      color: #172033;
+      background: white;
+      cursor: pointer;
+    }
+
+    button:hover { background: #f0f4fa; }
+
+    button.primary {
+      border-color: #1457c5;
+      color: white;
+      background: #1457c5;
+    }
+
+    button.primary:hover { background: #1049a7; }
+
+    button.remove {
+      grid-column: 1 / -1;
+      justify-self: end;
+      min-height: 34px;
+      padding: 5px 10px;
+      color: #963030;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .status { min-height: 1.5em; margin-bottom: 0; }
+
+    @media (max-width: 600px) {
+      main { margin: 24px auto; }
+      .panel { padding: 16px; }
+      .fields, .entry { grid-template-columns: 1fr; }
+      button.remove { grid-column: 1; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Vokabel-JSON erstellen</h1>
+    <p class="intro">Bilder oder PDFs automatisch auslesen lassen und erkannte Englisch-Deutsch-Vokabeln in eine JSON-Datei umwandeln. Die Dateien bleiben lokal auf deinem Gerät. Zur Texterkennung muss eine Internetverbindung bestehen, damit die Browser-Bibliotheken geladen werden können.</p>
+
+    <section class="panel" aria-labelledby="images-heading">
+      <h2 id="images-heading">1. Vorlagen auswählen</h2>
+      <label for="images">Bilder (mehrere möglich)</label>
+      <input id="images" type="file" accept="image/jpeg,image/png,image/webp,image/bmp" multiple>
+      <div id="image-list" class="image-list" aria-live="polite"></div>
+      <label for="pdf-file" style="margin-top: 16px">PDF als Vorlage öffnen (optional)</label>
+      <input id="pdf-file" type="file" accept="application/pdf,.pdf">
+      <div id="pdf-container" hidden>
+        <p id="pdf-name" class="hint"></p>
+        <iframe id="pdf-viewer" class="pdf-preview" title="PDF-Vorschau"></iframe>
+        <p class="hint">Falls dein Browser die PDF-Vorschau nicht unterstützt, <a id="pdf-open" target="_blank" rel="noopener noreferrer">öffne das PDF in einem neuen Tab</a>.</p>
+      </div>
+      <div class="actions">
+        <button id="recognize-files" class="primary" type="button">Vokabeln automatisch erkennen</button>
+      </div>
+      <progress id="recognition-progress" max="1" value="0" style="display: none; width: 100%; margin-top: 14px"></progress>
+      <p id="recognition-status" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="panel" aria-labelledby="list-heading">
+      <h2 id="list-heading">2. Liste benennen</h2>
+      <div class="fields">
+        <label for="list-name" style="grid-column: 1 / -1">Listenname
+          <input id="list-name" type="text" placeholder="z. B. Climate and society" required>
+        </label>
+        <label for="description" style="grid-column: 1 / -1">Katalogbeschreibung
+          <input id="description" type="text" placeholder="z. B. Klima und Gesellschaft">
+        </label>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="entries-heading">
+      <h2 id="entries-heading">3. Erkannte Vokabelpaare</h2>
+      <p class="hint">Die erkannten Paare werden automatisch eingetragen. Prüfe sie kurz auf OCR-Fehler; bei Bedarf kannst du den Text direkt korrigieren. Einzelne Vokabeln musst du nicht abtippen.</p>
+      <div class="actions">
+        <button id="download-package" class="primary" type="button">JSON und Katalogeintrag gemeinsam herunterladen (.zip)</button>
+      </div>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+
+      <div id="entries"></div>
+    </section>
+  </main>
+
+  <script>
+    const entries = document.querySelector("#entries");
+    const status = document.querySelector("#status");
+    const imageList = document.querySelector("#image-list");
+    const recognitionStatus = document.querySelector("#recognition-status");
+    const recognitionProgress = document.querySelector("#recognition-progress");
+    let imageUrls = [];
+    let pdfUrl = null;
+
+    function addEntry(english = "", german = "") {
+      const row = document.createElement("div");
+      row.className = "entry";
+
+      for (const [labelText, value] of [["Englisch", english], ["Deutsch", german]]) {
+        const label = document.createElement("label");
+        label.textContent = labelText;
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = value;
+        input.autocomplete = "off";
+        label.append(input);
+        row.append(label);
+      }
+
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "remove";
+      remove.textContent = "Zeile entfernen";
+      remove.addEventListener("click", () => row.remove());
+      row.append(remove);
+      entries.append(row);
+    }
+
+    function slugify(value) {
+      return value.trim().toLowerCase()
+        .replaceAll("ä", "ae").replaceAll("ö", "oe")
+        .replaceAll("ü", "ue").replaceAll("ß", "ss")
+        .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    }
+
+    function getList() {
+      const title = document.querySelector("#list-name").value.trim();
+      const id = slugify(title);
+      const pairs = [...entries.querySelectorAll(".entry")].map(row => {
+        const inputs = row.querySelectorAll("input");
+        return { x: inputs[0].value.trim(), y: inputs[1].value.trim() };
+      });
+      if (pairs.some(pair => Boolean(pair.x) !== Boolean(pair.y))) {
+        throw new Error("Bitte vervollständige jedes angefangene Vokabelpaar.");
+      }
+      const completePairs = pairs.filter(pair => pair.x && pair.y);
+
+      if (!title || !id) throw new Error("Bitte gib einen gültigen Listennamen ein.");
+      if (!completePairs.length) throw new Error("Bitte trage mindestens ein vollständiges Vokabelpaar ein.");
+
+      return {
+        id,
+        title,
+        description: document.querySelector("#description").value.trim(),
+        wordCount: completePairs.length,
+        file: `datas/12T2/${id}.json`,
+        document: { languageX: "Englisch", languageY: "Deutsch", entries: completePairs }
+      };
+    }
+
+    function downloadBlob(filename, blob) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function makeZip(files) {
+      const encoder = new TextEncoder();
+      const crcTable = new Uint32Array(256);
+      for (let index = 0; index < crcTable.length; index++) {
+        let value = index;
+        for (let bit = 0; bit < 8; bit++) {
+          value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+        }
+        crcTable[index] = value >>> 0;
+      }
+
+      function crc32(bytes) {
+        let crc = 0xffffffff;
+        for (const byte of bytes) crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+        return (crc ^ 0xffffffff) >>> 0;
+      }
+
+      function header(size) {
+        const bytes = new Uint8Array(size);
+        return { bytes, view: new DataView(bytes.buffer) };
+      }
+
+      const localParts = [];
+      const centralParts = [];
+      let localOffset = 0;
+      for (const file of files) {
+        const name = encoder.encode(file.name);
+        const data = encoder.encode(file.content);
+        const checksum = crc32(data);
+        const local = header(30 + name.length);
+        local.view.setUint32(0, 0x04034b50, true);
+        local.view.setUint16(4, 20, true);
+        local.view.setUint16(6, 0x0800, true);
+        local.view.setUint16(8, 0, true);
+        local.view.setUint16(10, 0, true);
+        local.view.setUint16(12, 0x21, true);
+        local.view.setUint32(14, checksum, true);
+        local.view.setUint32(18, data.length, true);
+        local.view.setUint32(22, data.length, true);
+        local.view.setUint16(26, name.length, true);
+        local.view.setUint16(28, 0, true);
+        local.bytes.set(name, 30);
+        localParts.push(local.bytes, data);
+
+        const central = header(46 + name.length, true);
+        central.view.setUint32(0, 0x02014b50, true);
+        central.view.setUint16(4, 20, true);
+        central.view.setUint16(6, 20, true);
+        central.view.setUint16(8, 0x0800, true);
+        central.view.setUint16(10, 0, true);
+        central.view.setUint16(12, 0, true);
+        central.view.setUint16(14, 0x21, true);
+        central.view.setUint32(16, checksum, true);
+        central.view.setUint32(20, data.length, true);
+        central.view.setUint32(24, data.length, true);
+        central.view.setUint16(28, name.length, true);
+        central.view.setUint16(30, 0, true);
+        central.view.setUint16(32, 0, true);
+        central.view.setUint16(34, 0, true);
+        central.view.setUint16(36, 0, true);
+        central.view.setUint32(38, 0, true);
+        central.view.setUint32(42, localOffset, true);
+        central.bytes.set(name, 46);
+        centralParts.push(central.bytes);
+        localOffset += local.bytes.length + data.length;
+      }
+
+      const centralSize = centralParts.reduce((size, part) => size + part.length, 0);
+      const end = header(22);
+      end.view.setUint32(0, 0x06054b50, true);
+      end.view.setUint16(4, 0, true);
+      end.view.setUint16(6, 0, true);
+      end.view.setUint16(8, files.length, true);
+      end.view.setUint16(10, files.length, true);
+      end.view.setUint32(12, centralSize, true);
+      end.view.setUint32(16, localOffset, true);
+      end.view.setUint16(20, 0, true);
+      return new Blob([...localParts, ...centralParts, end.bytes], { type: "application/zip" });
+    }
+
+    function loadScript(src, globalName) {
+      if (window[globalName]) return Promise.resolve(window[globalName]);
+      return new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = src;
+        script.onload = () => window[globalName]
+          ? resolve(window[globalName])
+          : reject(new Error(`Die Bibliothek ${globalName} wurde nicht korrekt geladen.`));
+        script.onerror = () => reject(new Error(
+          "Die OCR-Bibliotheken konnten nicht geladen werden. Prüfe deine Internetverbindung und lade die Seite erneut."
+        ));
+        document.head.append(script);
+      });
+    }
+
+    async function loadRecognitionLibraries() {
+      const pdfjsLib = await loadScript(
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",
+        "pdfjsLib"
+      );
+      const tesseract = await loadScript(
+        "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js",
+        "Tesseract"
+      );
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      return { pdfjsLib, tesseract };
+    }
+
+    function rowsFromWords(words) {
+      const rows = [];
+      for (const word of words.filter(item => item.text && item.text.trim()).sort(
+        (a, b) => ((a.y0 + a.y1) / 2) - ((b.y0 + b.y1) / 2)
+      )) {
+        const center = (word.y0 + word.y1) / 2;
+        const height = Math.max(1, word.y1 - word.y0);
+        const row = rows.find(candidate =>
+          Math.abs(candidate.center - center) <= Math.max(4, Math.min(candidate.height, height) * 0.55)
+        );
+        if (row) {
+          row.words.push(word);
+          row.center = row.words.reduce((sum, item) => sum + (item.y0 + item.y1) / 2, 0) / row.words.length;
+          row.height = Math.max(row.height, height);
+        } else {
+          rows.push({ center, height, words: [word] });
+        }
+      }
+      return rows.map(row => row.words.sort((a, b) => a.x0 - b.x0));
+    }
+
+    function extractPairs(words) {
+      const rows = rowsFromWords(words);
+      const pairs = [];
+      const singleRows = [];
+      for (const row of rows) {
+        const text = row.map(word => word.text.trim()).join(" ").trim();
+        const separated = text.match(/^(.+?)\s*(?:;|\||=>|->|–|—|\s-\s)\s*(.+)$/);
+        if (separated) {
+          pairs.push({ x: separated[1].trim(), y: separated[2].trim() });
+          continue;
+        }
+
+        const gaps = row.slice(0, -1).map((word, index) => ({
+          size: row[index + 1].x0 - word.x1,
+          index
+        }));
+        const largestGap = gaps.sort((a, b) => b.size - a.size)[0];
+        const typicalHeight = row.reduce((sum, word) => sum + Math.max(1, word.y1 - word.y0), 0) / row.length;
+        if (largestGap && largestGap.size >= Math.max(12, typicalHeight * 1.35)) {
+          const split = largestGap.index + 1;
+          pairs.push({
+            x: row.slice(0, split).map(word => word.text.trim()).join(" "),
+            y: row.slice(split).map(word => word.text.trim()).join(" ")
+          });
+        } else {
+          singleRows.push(row);
+        }
+      }
+
+      if (singleRows.length >= 4) {
+        const lineRows = singleRows.map(row => ({
+          row,
+          x: Math.min(...row.map(word => word.x0)),
+          y: row.reduce((sum, word) => sum + (word.y0 + word.y1) / 2, 0) / row.length,
+          height: row.reduce((sum, word) => sum + word.y1 - word.y0, 0) / row.length
+        })).sort((a, b) => a.x - b.x);
+        const starts = lineRows.map(line => line.x);
+        const startGaps = starts.slice(0, -1).map((x, index) => ({
+          size: starts[index + 1] - x,
+          index
+        })).sort((a, b) => b.size - a.size)[0];
+        const typicalHeight = lineRows.reduce((sum, line) => sum + line.height, 0) / lineRows.length;
+        if (startGaps && startGaps.size >= Math.max(40, typicalHeight * 2)) {
+          const left = lineRows.slice(0, startGaps.index + 1).sort((a, b) => a.y - b.y);
+          const right = lineRows.slice(startGaps.index + 1).sort((a, b) => a.y - b.y);
+          if (left.length >= 2 && right.length >= 2 && Math.abs(left.length - right.length) <= 1) {
+            for (let index = 0; index < Math.min(left.length, right.length); index++) {
+              pairs.push({
+                x: left[index].row.map(word => word.text.trim()).join(" "),
+                y: right[index].row.map(word => word.text.trim()).join(" ")
+              });
+            }
+          }
+        }
+      }
+      return pairs.filter(pair => pair.x && pair.y);
+    }
+
+    function getPdfWords(items, pageHeight) {
+      const words = [];
+      for (const item of items) {
+        if (!item.str || !item.str.trim()) continue;
+        const parts = item.str.trim().split(/\s+/);
+        const totalChars = parts.reduce((sum, part) => sum + part.length, 0) || 1;
+        const height = item.height || 10;
+        let x = item.transform[4];
+        const y0 = pageHeight - (item.transform[5] + height);
+        const y1 = pageHeight - item.transform[5];
+        for (const part of parts) {
+          const width = item.width * (part.length / totalChars);
+          words.push({ text: part, x0: x, x1: x + width, y0, y1 });
+          x += width + Math.max(1, height * 0.15);
+        }
+      }
+      return words;
+    }
+
+    function getOcrWords(data) {
+      return (data.words || []).map(word => ({
+        text: word.text,
+        x0: word.bbox.x0,
+        x1: word.bbox.x1,
+        y0: word.bbox.y0,
+        y1: word.bbox.y1
+      }));
+    }
+
+    async function recognizePdf(file, pdfjsLib, worker, collected) {
+      const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+        recognitionStatus.textContent = `PDF „${file.name}“: Seite ${pageNumber} von ${pdf.numPages} wird gelesen …`;
+        const page = await pdf.getPage(pageNumber);
+        const text = await page.getTextContent();
+        let pairs = extractPairs(getPdfWords(text.items, page.view[3] - page.view[1]));
+        if (!pairs.length) {
+          const baseViewport = page.getViewport({ scale: 1 });
+          const scale = Math.min(2.5, 2000 / baseViewport.width);
+          const viewport = page.getViewport({ scale });
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.ceil(viewport.width);
+          canvas.height = Math.ceil(viewport.height);
+          await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+          const result = await worker.recognize(canvas);
+          pairs = extractPairs(getOcrWords(result.data));
+          canvas.width = 0;
+          canvas.height = 0;
+        }
+        collected.push(...pairs);
+        recognitionProgress.value = pageNumber / pdf.numPages;
+      }
+      await pdf.destroy();
+    }
+
+    document.querySelector("#recognize-files").addEventListener("click", async event => {
+      const imageFiles = [...document.querySelector("#images").files];
+      const pdfFile = document.querySelector("#pdf-file").files[0];
+      if (!imageFiles.length && !pdfFile) {
+        recognitionStatus.textContent = "Wähle zuerst mindestens ein Bild oder eine PDF-Datei aus.";
+        return;
+      }
+      const hasEntries = [...entries.querySelectorAll(".entry input")].some(input => input.value.trim());
+      if (hasEntries && !confirm("Die vorhandenen Vokabelpaare werden durch die neu erkannten Paare ersetzt. Fortfahren?")) {
+        return;
+      }
+
+      const button = event.currentTarget;
+      let worker;
+      button.disabled = true;
+      recognitionProgress.style.display = "block";
+      recognitionProgress.value = 0;
+      recognitionStatus.textContent = "Lade OCR-Bibliotheken …";
+      try {
+        const { pdfjsLib, tesseract } = await loadRecognitionLibraries();
+        worker = await tesseract.createWorker("eng+deu", 1, {
+          logger: message => {
+            if (message.status === "recognizing text") {
+              recognitionStatus.textContent = `Texterkennung läuft: ${Math.round(message.progress * 100)} %`;
+            } else if (message.status) {
+              recognitionStatus.textContent = `OCR: ${message.status} …`;
+            }
+          }
+        });
+
+        const collected = [];
+        for (const file of imageFiles) {
+          recognitionStatus.textContent = `Bild „${file.name}“ wird gelesen …`;
+          const bitmap = await createImageBitmap(file);
+          const canvas = document.createElement("canvas");
+          canvas.width = bitmap.width;
+          canvas.height = bitmap.height;
+          try {
+            canvas.getContext("2d").drawImage(bitmap, 0, 0);
+            const result = await worker.recognize(canvas);
+            collected.push(...extractPairs(getOcrWords(result.data)));
+          } finally {
+            bitmap.close();
+            canvas.width = 0;
+            canvas.height = 0;
+          }
+        }
+        if (pdfFile) await recognizePdf(pdfFile, pdfjsLib, worker, collected);
+        if (!collected.length) {
+          throw new Error("Es wurden keine Vokabelpaare erkannt. Prüfe Bildqualität und Layout; Englisch sollte links und Deutsch rechts stehen.");
+        }
+
+        const uniquePairs = new Map();
+        for (const pair of collected) {
+          const key = `${pair.x.replace(/\s+/g, " ").trim().toLocaleLowerCase()}|${pair.y.replace(/\s+/g, " ").trim().toLocaleLowerCase()}`;
+          if (!uniquePairs.has(key)) uniquePairs.set(key, pair);
+        }
+        const recognizedPairs = [...uniquePairs.values()];
+        entries.replaceChildren();
+        recognizedPairs.forEach(pair => addEntry(pair.x, pair.y));
+        recognitionProgress.value = 1;
+        const duplicates = collected.length - recognizedPairs.length;
+        recognitionStatus.textContent = `${recognizedPairs.length} Vokabelpaare erkannt${duplicates ? `, ${duplicates} Duplikate entfernt` : ""}. Prüfe sie kurz und lade anschließend die JSON-Datei herunter.`;
+      } catch (error) {
+        recognitionStatus.textContent = error.message || String(error);
+      } finally {
+        if (worker) await worker.terminate();
+        button.disabled = false;
+      }
+    });
+
+    document.querySelector("#download-package").addEventListener("click", () => {
+      try {
+        const list = getList();
+        const catalogEntry = {
+          id: list.id,
+          title: list.title,
+          description: list.description,
+          wordCount: list.wordCount,
+          file: list.file
+        };
+        const prettyJson = data => JSON.stringify(data, null, 2) + "\n";
+        const zip = makeZip([
+          { name: `${list.id}/${list.id}.json`, content: prettyJson(list.document) },
+          { name: `${list.id}/meta.json`, content: prettyJson(catalogEntry) }
+        ]);
+        downloadBlob(`${list.id}.zip`, zip);
+        status.textContent = `Paket ${list.id}.zip mit JSON und Katalogeintrag heruntergeladen.`;
+      } catch (error) {
+        status.textContent = error.message;
+      }
+    });
+    document.querySelector("#images").addEventListener("change", event => {
+      imageUrls.forEach(URL.revokeObjectURL);
+      imageUrls = [];
+      imageList.replaceChildren();
+      for (const file of event.target.files) {
+        if (!file.type.startsWith("image/")) continue;
+        const url = URL.createObjectURL(file);
+        imageUrls.push(url);
+        const card = document.createElement("div");
+        card.className = "image-card";
+        const image = document.createElement("img");
+        image.src = url;
+        image.alt = `Vorschau: ${file.name}`;
+        const name = document.createElement("span");
+        name.textContent = file.name;
+        card.append(image, name);
+        imageList.append(card);
+      }
+    });
+    document.querySelector("#pdf-file").addEventListener("change", event => {
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+      pdfUrl = null;
+      const file = event.target.files[0];
+      const container = document.querySelector("#pdf-container");
+      if (!file) {
+        container.hidden = true;
+        return;
+      }
+      if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+        container.hidden = true;
+        status.textContent = "Bitte wähle eine PDF-Datei aus.";
+        event.target.value = "";
+        return;
+      }
+      pdfUrl = URL.createObjectURL(file);
+      document.querySelector("#pdf-name").textContent = `PDF-Vorschau: ${file.name}`;
+      document.querySelector("#pdf-viewer").src = pdfUrl;
+      document.querySelector("#pdf-open").href = pdfUrl;
+      container.hidden = false;
+      status.textContent = "";
+    });
+
+    window.addEventListener("pagehide", () => {
+      imageUrls.forEach(URL.revokeObjectURL);
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    });
+
+  </script>
+</body>
+</html>

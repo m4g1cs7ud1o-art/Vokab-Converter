@@ -39,3 +39,15 @@ Jeder Eintrag enthält genau zwei Textfelder: `x` für Englisch und `y` für Deu
 4. Committe beide Dateien. Bei GitHub Pages wird die Änderung nach der Veröffentlichung des Commits sichtbar.
 
 Die Klassenkennung lautet `12T2`, der Jahrgang `12`. Der Klassencode ist sechs Ziffern lang und beginnt ebenfalls mit `12`.
+
+## Vokabeln im Browser erstellen
+
+Öffne `index.html` in einem aktuellen Browser. Python und Tesseract müssen nicht installiert werden. Wähle Bilder und/oder eine PDF-Datei und klicke auf „Vokabeln automatisch erkennen“. Die App erkennt Englisch-Deutsch-Paare und trägt sie in die Liste ein. Prüfe die Ergebnisse kurz auf OCR-Fehler, bevor du das Paket herunterlädst. Gib den Listennamen in das einzelne Namensfeld ein: Er wird als Titel verwendet und automatisch für Dateiname und ID in Kleinbuchstaben mit Bindestrichen umgewandelt. Trage die Beschreibung so ein, wie sie im `description`-Feld des Katalogeintrags erscheinen soll. Für eingescannte PDFs und Bilder läuft die OCR lokal im Browser; PDFs mit auswählbarem Text werden zuerst direkt ausgelesen.
+
+Beim ersten Start der Erkennung ist eine Internetverbindung erforderlich, um PDF.js, Tesseract.js und die Sprachdaten für Englisch und Deutsch vom CDN zu laden. Deine ausgewählten Bilder und PDFs werden nicht hochgeladen. Die PDF-Vorschau funktioniert über den eingebauten PDF-Reader des Browsers; falls sie nicht angezeigt wird, kannst du das PDF über den Link in einem neuen Tab öffnen.
+
+Der Button „JSON und Katalogeintrag gemeinsam herunterladen“ erzeugt eine ZIP-Datei namens `<id>.zip`. Darin liegen beide Dateien in einem Ordner `<id>/`: `<id>.json` und `meta.json`. Entpacke das ZIP, lege die Vokabel-JSON unter `datas/12T2/` ab und ergänze den Inhalt von `meta.json` als Eintrag unter `12T2` im `lists`-Abschnitt von `datas/catalog.json`. Der Katalogeintrag enthält Titel, Beschreibung, Wortanzahl und Dateipfad und macht die neue JSON-Liste für den Trainer auffindbar. Prüfe, dass die ID noch nicht vergeben ist.
+
+## Optional: Texterkennung per Python
+
+Alternativ kann `bild_zu_vokabel_json.py` Bildtext per OCR erkennen. Diese optionale Variante erfordert Python und Tesseract OCR samt Sprachdaten für Englisch (`eng`) und Deutsch (`deu`). Die Browser-App selbst hat diese Abhängigkeiten nicht.
