@@ -111,6 +111,12 @@
       border-radius: 8px;
     }
 
+    .entry-number {
+      grid-column: 1 / -1;
+      color: #536078;
+      font-weight: 600;
+    }
+
     .entry label { font-weight: 500; }
 
     button {
@@ -203,13 +209,16 @@
 
     <section class="panel" aria-labelledby="entries-heading">
       <h2 id="entries-heading">3. Vokabeleinträge bearbeiten</h2>
-      <p class="hint">Die erkannten Einträge werden automatisch eingetragen. Prüfe sie kurz auf OCR-Fehler; bei Bedarf kannst du den Text direkt korrigieren. Im Drei-Spalten-Format sind Informationen in Spalte Z optional.</p>
+      <p class="hint">Erkannte Einträge werden automatisch eingetragen. Du kannst weitere Zeilen manuell hinzufügen und die Einträge auf OCR-Fehler prüfen oder korrigieren. Im Drei-Spalten-Format sind Informationen in Spalte Z optional.</p>
       <div class="actions">
         <button id="download-package" class="primary" type="button">JSON und Katalogeintrag gemeinsam herunterladen (.zip)</button>
       </div>
       <p id="status" class="status" role="status" aria-live="polite"></p>
 
       <div id="entries"></div>
+      <div class="actions">
+        <button id="add-entry" type="button">Weitere Vokabelzeile hinzufügen</button>
+      </div>
     </section>
   </main>
 
@@ -227,6 +236,10 @@
       const row = document.createElement("div");
       row.className = "entry";
       row.dataset.information = z;
+      const number = document.createElement("span");
+      number.className = "entry-number";
+      number.setAttribute("aria-label", "Vokabelzeile");
+      row.append(number);
       const fields = [["Englisch", "x", x]];
       if (entryFormat.value === "three") {
         row.classList.add("three-columns");
@@ -250,9 +263,19 @@
       remove.type = "button";
       remove.className = "remove";
       remove.textContent = "Zeile entfernen";
-      remove.addEventListener("click", () => row.remove());
+      remove.addEventListener("click", () => {
+        row.remove();
+        renumberEntries();
+      });
       row.append(remove);
       entries.append(row);
+      renumberEntries();
+    }
+
+    function renumberEntries() {
+      entries.querySelectorAll(".entry-number").forEach((number, index) => {
+        number.textContent = `${index + 1}. Vokabelzeile`;
+      });
     }
 
     function getEntryValue(row, field) {
@@ -696,6 +719,10 @@
       }
     });
     entryFormat.addEventListener("change", updateEntryFormat);
+    document.querySelector("#add-entry").addEventListener("click", () => {
+      addEntry();
+      entries.querySelector(".entry:last-child [data-field=\"x\"]").focus();
+    });
     document.querySelector("#images").addEventListener("change", event => {
       imageUrls.forEach(URL.revokeObjectURL);
       imageUrls = [];
