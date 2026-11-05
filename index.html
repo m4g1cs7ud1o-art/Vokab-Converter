@@ -40,11 +40,13 @@
       gap: 14px;
     }
 
+    .entry.three-columns { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
     label { display: grid; gap: 6px; font-weight: 600; }
 
-    input, textarea, button { font: inherit; }
+    input, textarea, select, button { font: inherit; }
 
-    input[type="text"], textarea {
+    input[type="text"], textarea, select {
       width: 100%;
       padding: 10px 12px;
       border: 1px solid #b9c4d5;
@@ -53,7 +55,7 @@
       background: white;
     }
 
-    input:focus, textarea:focus, button:focus-visible {
+    input:focus, textarea:focus, select:focus-visible, button:focus-visible {
       outline: 3px solid #8bb9ff;
       outline-offset: 2px;
     }
@@ -152,6 +154,7 @@
       main { margin: 24px auto; }
       .panel { padding: 16px; }
       .fields, .entry { grid-template-columns: 1fr; }
+      .entry.three-columns { grid-template-columns: 1fr; }
       button.remove { grid-column: 1; }
     }
   </style>
@@ -173,6 +176,12 @@
         <iframe id="pdf-viewer" class="pdf-preview" title="PDF-Vorschau"></iframe>
         <p class="hint">Falls dein Browser die PDF-Vorschau nicht unterstützt, <a id="pdf-open" target="_blank" rel="noopener noreferrer">öffne das PDF in einem neuen Tab</a>.</p>
       </div>
+      <label for="entry-format" style="margin-top: 16px">Spaltenformat
+        <select id="entry-format">
+          <option value="two">2 Spalten: Sprache X und Sprache Y</option>
+          <option value="three">3 Spalten: Sprache X, Informationen (Z) und Sprache Y</option>
+        </select>
+      </label>
       <div class="actions">
         <button id="recognize-files" class="primary" type="button">Vokabeln automatisch erkennen</button>
       </div>
@@ -193,8 +202,8 @@
     </section>
 
     <section class="panel" aria-labelledby="entries-heading">
-      <h2 id="entries-heading">3. Erkannte Vokabelpaare</h2>
-      <p class="hint">Die erkannten Paare werden automatisch eingetragen. Prüfe sie kurz auf OCR-Fehler; bei Bedarf kannst du den Text direkt korrigieren. Einzelne Vokabeln musst du nicht abtippen.</p>
+      <h2 id="entries-heading">3. Vokabeleinträge bearbeiten</h2>
+      <p class="hint">Die erkannten Einträge werden automatisch eingetragen. Prüfe sie kurz auf OCR-Fehler; bei Bedarf kannst du den Text direkt korrigieren. Im Drei-Spalten-Format sind Informationen in Spalte Z optional.</p>
       <div class="actions">
         <button id="download-package" class="primary" type="button">JSON und Katalogeintrag gemeinsam herunterladen (.zip)</button>
       </div>
@@ -210,20 +219,29 @@
     const imageList = document.querySelector("#image-list");
     const recognitionStatus = document.querySelector("#recognition-status");
     const recognitionProgress = document.querySelector("#recognition-progress");
+    const entryFormat = document.querySelector("#entry-format");
     let imageUrls = [];
     let pdfUrl = null;
 
-    function addEntry(english = "", german = "") {
+    function addEntry(x = "", y = "", z = "") {
       const row = document.createElement("div");
       row.className = "entry";
+      row.dataset.information = z;
+      const fields = [["Englisch", "x", x]];
+      if (entryFormat.value === "three") {
+        row.classList.add("three-columns");
+        fields.push(["Informationen", "z", z]);
+      }
+      fields.push(["Deutsch", "y", y]);
 
-      for (const [labelText, value] of [["Englisch", english], ["Deutsch", german]]) {
+      for (const [labelText, field, value] of fields) {
         const label = document.createElement("label");
         label.textContent = labelText;
         const input = document.createElement("input");
         input.type = "text";
         input.value = value;
         input.autocomplete = "off";
+        input.dataset.field = field;
         label.append(input);
         row.append(label);
       }
@@ -237,6 +255,20 @@
       entries.append(row);
     }
 
+    function getEntryValue(row, field) {
+      return row.querySelector(`[data-field="${field}"]`)?.value.trim() || "";
+    }
+
+    function updateEntryFormat() {
+      const currentEntries = [...entries.querySelectorAll(".entry")].map(row => ({
+        x: getEntryValue(row, "x"),
+        z: row.querySelector('[data-field="z"]')?.value.trim() ?? row.dataset.information ?? "",
+        y: getEntryValue(row, "y")
+      }));
+      entries.replaceChildren();
+      currentEntries.forEach(entry => addEntry(entry.x, entry.y, entry.z));
+    }
+
     function slugify(value) {
       return value.trim().toLowerCase()
         .replaceAll("ä", "ae").replaceAll("ö", "oe")
@@ -248,10 +280,12 @@
     function getList() {
       const title = document.querySelector("#list-name").value.trim();
       const id = slugify(title);
-      const pairs = [...entries.querySelectorAll(".entry")].map(row => {
-        const inputs = row.querySelectorAll("input");
-        return { x: inputs[0].value.trim(), y: inputs[1].value.trim() };
-      });
+      const isThreeColumn = entryFormat.value === "three";
+      const pairs = [...entries.querySelectorAll(".entry")].map(row => ({
+        x: getEntryValue(row, "x"),
+        ...(isThreeColumn ? { z: getEntryValue(row, "z") } : {}),
+        y: getEntryValue(row, "y")
+      }));
       if (pairs.some(pair => Boolean(pair.x) !== Boolean(pair.y))) {
         throw new Error("Bitte vervollständige jedes angefangene Vokabelpaar.");
       }
@@ -266,7 +300,12 @@
         description: document.querySelector("#description").value.trim(),
         wordCount: completePairs.length,
         file: `datas/12T2/${id}.json`,
-        document: { languageX: "Englisch", languageY: "Deutsch", entries: completePairs }
+        document: {
+          languageX: "Englisch",
+          ...(isThreeColumn ? { languageZ: "Informationen" } : {}),
+          languageY: "Deutsch",
+          entries: completePairs
+        }
       };
     }
 
@@ -413,11 +452,14 @@
       const rows = rowsFromWords(words);
       const pairs = [];
       const singleRows = [];
+      const isThreeColumn = entryFormat.value === "three";
       for (const row of rows) {
         const text = row.map(word => word.text.trim()).join(" ").trim();
-        const separated = text.match(/^(.+?)\s*(?:;|\||=>|->|–|—|\s-\s)\s*(.+)$/);
-        if (separated) {
-          pairs.push({ x: separated[1].trim(), y: separated[2].trim() });
+        const separated = text.split(/\s*(?:;|\||=>|->|–|—|\s-\s)\s*/);
+        if (separated.length >= 2) {
+          pairs.push(isThreeColumn && separated.length >= 3
+            ? { x: separated[0].trim(), z: separated.slice(1, -1).join(" ").trim(), y: separated.at(-1).trim() }
+            : { x: separated[0].trim(), y: separated.slice(1).join(" ").trim() });
           continue;
         }
 
@@ -427,7 +469,19 @@
         }));
         const largestGap = gaps.sort((a, b) => b.size - a.size)[0];
         const typicalHeight = row.reduce((sum, word) => sum + Math.max(1, word.y1 - word.y0), 0) / row.length;
-        if (largestGap && largestGap.size >= Math.max(12, typicalHeight * 1.35)) {
+        const gapThreshold = Math.max(12, typicalHeight * 1.35);
+        const columnGaps = gaps.filter(gap => gap.size >= gapThreshold)
+          .sort((a, b) => b.size - a.size)
+          .slice(0, 2)
+          .sort((a, b) => a.index - b.index);
+        if (isThreeColumn && columnGaps.length >= 2) {
+          const [first, second] = columnGaps;
+          pairs.push({
+            x: row.slice(0, first.index + 1).map(word => word.text.trim()).join(" "),
+            z: row.slice(first.index + 1, second.index + 1).map(word => word.text.trim()).join(" "),
+            y: row.slice(second.index + 1).map(word => word.text.trim()).join(" ")
+          });
+        } else if (largestGap && largestGap.size >= gapThreshold) {
           const split = largestGap.index + 1;
           pairs.push({
             x: row.slice(0, split).map(word => word.text.trim()).join(" "),
@@ -451,7 +505,31 @@
           index
         })).sort((a, b) => b.size - a.size)[0];
         const typicalHeight = lineRows.reduce((sum, line) => sum + line.height, 0) / lineRows.length;
-        if (startGaps && startGaps.size >= Math.max(40, typicalHeight * 2)) {
+        const columnThreshold = Math.max(40, typicalHeight * 2);
+        if (isThreeColumn) {
+          const columnBreaks = starts.slice(0, -1).map((x, index) => ({
+            size: starts[index + 1] - x,
+            index
+          })).filter(gap => gap.size >= columnThreshold).sort((a, b) => a.index - b.index);
+          if (columnBreaks.length >= 2) {
+            const columns = [
+              lineRows.slice(0, columnBreaks[0].index + 1),
+              lineRows.slice(columnBreaks[0].index + 1, columnBreaks[1].index + 1),
+              lineRows.slice(columnBreaks[1].index + 1)
+            ].map(column => column.sort((a, b) => a.y - b.y));
+            if (columns.every(column => column.length >= 2) &&
+                Math.max(...columns.map(column => column.length)) -
+                Math.min(...columns.map(column => column.length)) <= 1) {
+              for (let index = 0; index < Math.min(...columns.map(column => column.length)); index++) {
+                pairs.push({
+                  x: columns[0][index].row.map(word => word.text.trim()).join(" "),
+                  z: columns[1][index].row.map(word => word.text.trim()).join(" "),
+                  y: columns[2][index].row.map(word => word.text.trim()).join(" ")
+                });
+              }
+            }
+          }
+        } else if (startGaps && startGaps.size >= columnThreshold) {
           const left = lineRows.slice(0, startGaps.index + 1).sort((a, b) => a.y - b.y);
           const right = lineRows.slice(startGaps.index + 1).sort((a, b) => a.y - b.y);
           if (left.length >= 2 && right.length >= 2 && Math.abs(left.length - right.length) <= 1) {
@@ -530,7 +608,7 @@
         return;
       }
       const hasEntries = [...entries.querySelectorAll(".entry input")].some(input => input.value.trim());
-      if (hasEntries && !confirm("Die vorhandenen Vokabelpaare werden durch die neu erkannten Paare ersetzt. Fortfahren?")) {
+      if (hasEntries && !confirm("Die vorhandenen Einträge werden durch die neu erkannten Einträge ersetzt. Fortfahren?")) {
         return;
       }
 
@@ -571,20 +649,23 @@
         }
         if (pdfFile) await recognizePdf(pdfFile, pdfjsLib, worker, collected);
         if (!collected.length) {
-          throw new Error("Es wurden keine Vokabelpaare erkannt. Prüfe Bildqualität und Layout; Englisch sollte links und Deutsch rechts stehen.");
+          throw new Error(entryFormat.value === "three"
+            ? "Es wurden keine Vokabeleinträge erkannt. Prüfe Bildqualität und Layout; Englisch sollte links, Informationen mittig und Deutsch rechts stehen."
+            : "Es wurden keine Vokabelpaare erkannt. Prüfe Bildqualität und Layout; Englisch sollte links und Deutsch rechts stehen.");
         }
 
         const uniquePairs = new Map();
         for (const pair of collected) {
-          const key = `${pair.x.replace(/\s+/g, " ").trim().toLocaleLowerCase()}|${pair.y.replace(/\s+/g, " ").trim().toLocaleLowerCase()}`;
+          const key = `${pair.x.replace(/\s+/g, " ").trim().toLocaleLowerCase()}|${(pair.z || "").replace(/\s+/g, " ").trim().toLocaleLowerCase()}|${pair.y.replace(/\s+/g, " ").trim().toLocaleLowerCase()}`;
           if (!uniquePairs.has(key)) uniquePairs.set(key, pair);
         }
         const recognizedPairs = [...uniquePairs.values()];
         entries.replaceChildren();
-        recognizedPairs.forEach(pair => addEntry(pair.x, pair.y));
+        recognizedPairs.forEach(pair => addEntry(pair.x, pair.y, pair.z || ""));
         recognitionProgress.value = 1;
         const duplicates = collected.length - recognizedPairs.length;
-        recognitionStatus.textContent = `${recognizedPairs.length} Vokabelpaare erkannt${duplicates ? `, ${duplicates} Duplikate entfernt` : ""}. Prüfe sie kurz und lade anschließend die JSON-Datei herunter.`;
+        const entryType = entryFormat.value === "three" ? "Vokabeleinträge" : "Vokabelpaare";
+        recognitionStatus.textContent = `${recognizedPairs.length} ${entryType} erkannt${duplicates ? `, ${duplicates} Duplikate entfernt` : ""}. Prüfe sie kurz und lade anschließend die JSON-Datei herunter.`;
       } catch (error) {
         recognitionStatus.textContent = error.message || String(error);
       } finally {
@@ -614,6 +695,7 @@
         status.textContent = error.message;
       }
     });
+    entryFormat.addEventListener("change", updateEntryFormat);
     document.querySelector("#images").addEventListener("change", event => {
       imageUrls.forEach(URL.revokeObjectURL);
       imageUrls = [];
